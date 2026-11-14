@@ -152,8 +152,15 @@ final class GameScene: SKScene {
         // game.gd _ready
         setDefaultGlobalValues()
         walker.visible = false
+        GameState.score = Progress.saved
         scoreLabel.label?.text = String(GameState.score)
         GameState.randomFoodList = foodNames.shuffled()
+
+        // remember where the eyes sit so they can grow with the head
+        for path in ["EyesBack", "EyeRightOrigin", "EyeLeftOrigin"] {
+            if let n = pumpkin.node(path) { eyeParts.append((n, n.position, n.xScale)) }
+        }
+        headHome = pumpkinHead.position
 
         applyCamera()
         Log.write("scene ready")
@@ -263,7 +270,7 @@ final class GameScene: SKScene {
         let local = marker.convert(pointer, from: self)
         let dist = hypot(local.x, local.y)
         if dist == 0 { child.position = .zero; return }
-        let m = min(dist, 10)
+        let m = min(dist, 10 * eyeFollowScale)
         child.position = CGPoint(x: local.x / dist * m, y: local.y / dist * m)
     }
 
@@ -310,8 +317,7 @@ final class GameScene: SKScene {
 
     private func gameStart() {
         car.child("Timer")?.startTimer()
-        pumpkinHead.xScale = 0.85
-        pumpkinHead.yScale = 0.85
+        applyHeadSize(headScale(for: GameState.score))
         pumpkin.visible = true
         scoreAnimation.player?.play("show")
         GameState.canPick = false
@@ -323,8 +329,154 @@ final class GameScene: SKScene {
         AudioManager.shared.playGameSound("score")
         scoreAnimation.player?.play("score")
         scoreLabel.label?.text = String(GameState.score)
-        pumpkinHead.xScale += 0.0075
-        pumpkinHead.yScale += 0.0075
+        Progress.saved = GameState.score
+        applyHeadSize(headScale(for: GameState.score))
+    }
+
+    // MARK: growing head and the 500-food win (added for iPhone)
+
+    private var eyeParts: [(node: GNode, pos: CGPoint, scale: CGFloat)] = []
+    private var headHome = CGPoint.zero
+    private var eyeFollowScale: CGFloat = 1
+    private var winReady = false
+
+    // 0.85 at the start (original size), 1.9 when he is about to pop
+    private func headScale(for score: Int) -> CGFloat {
+        let t = CGFloat(min(score, Progress.target)) / CGFloat(Progress.target)
+        return 0.85 + (1.9 - 0.85) * t
+    }
+
+    // Scale the head around its centre and keep the eyes lined up with its eye holes.
+    private func applyHeadSize(_ s: CGFloat) {
+        pumpkinHead.xScale = s
+        pumpkinHead.yScale = s
+        let f = s / 0.85
+        eyeFollowScale = f
+        for e in eyeParts {
+            e.node.position = CGPoint(x: headHome.x + (e.pos.x - headHome.x) * f,
+                                      y: headHome.y + (e.pos.y - headHome.y) * f)
+            e.node.xScale = e.scale * f
+            e.node.yScale = e.scale * f
+        }
+    }
+
+    private func win() {
+        GameState.gameState = "win"
+        GameState.canPick = false
+        Progress.saved = 0
+        AudioManager.shared.playPumpkinSound("fantastic")
+        // puff up and wobble...
+        let grow = SKAction.customAction(withDuration: 2.4) { [weak self] _, t in
+            guard let self = self else { return }
+            let p = t / 2.4
+            let wobble = sin(p * 40) * 0.04 * p
+            self.applyHeadSize(1.9 + 0.6 * p * p + wobble)
+        }
+        pumpkinHead.run(grow) { [weak self] in self?.pop() }
+    }
+
+    private func pop() {
+        Haptics.pop()
+        AudioManager.shared.playGameSound("pop")
+        let center = world.convert(CGPoint.zero, from: pumpkinHead)
+        pumpkin.visible = false
+        // pumpkin pieces fly out
+        let colors: [UIColor] = [UIColor(red: 1, green: 0.66, blue: 0, alpha: 1),
+                                 UIColor(red: 1, green: 0.8, blue: 0.1, alpha: 1),
+                                 UIColor(red: 0.95, green: 0.5, blue: 0, alpha: 1),
+                                 UIColor(red: 0.35, green: 0.2, blue: 0.05, alpha: 1)]
+        for i in 0..<70 {
+            let r = CGFloat.random(in: 6...22)
+            let piece = SKShapeNode(path: piecePath(r))
+            piece.fillColor = colors[i % colors.count]
+            piece.strokeColor = .black
+            piece.lineWidth = 2
+            piece.position = center
+            piece.zPosition = 50
+            piece.zRotation = .random(in: 0...(2 * .pi))
+            world.addChild(piece)
+            let angle = CGFloat.random(in: 0...(2 * .pi))
+            let speed = CGFloat.random(in: 350...900)
+            let dx = cos(angle) * speed, dy = sin(angle) * speed
+            let fly = SKAction.customAction(withDuration: 2.2) { node, t in
+                let tt = CGFloat(t)
+                // y is down in the game world, so gravity adds to y
+                node.position = CGPoint(x: center.x + dx * tt, y: center.y + dy * tt + 700 * tt * tt)
+            }
+            piece.run(.group([fly, .rotate(byAngle: .random(in: -12...12), duration: 2.2),
+                              .sequence([.wait(forDuration: 1.4), .fadeOut(withDuration: 0.8)])])) {
+                piece.removeFromParent()
+            }
+        }
+        after(1.0) { [weak self] in self?.showWin() }
+    }
+
+    // Testing shortcut: 5 quick taps on the score box jump to 495.
+    private var scoreTaps: [Double] = []
+    private func scoreBoxContains(_ p: CGPoint) -> Bool {
+        guard let back = ui.node("Control/ScorePanel/Back"), back.inParentHierarchy(self),
+              ui.node("Control/ScorePanel")?.visible == true else { return false }
+        let l = back.convert(p, from: self)
+        return l.x >= 0 && l.y >= 0 && l.x <= 111 && l.y <= 49
+    }
+    private func scoreBoxTapped() {
+        scoreTaps = scoreTaps.filter { clock - $0 < 2 } + [clock]
+        guard scoreTaps.count >= 5, GameState.score < Progress.target - 5 else { return }
+        scoreTaps = []
+        GameState.score = Progress.target - 5
+        Progress.saved = GameState.score
+        scoreLabel.label?.text = String(GameState.score)
+        applyHeadSize(headScale(for: GameState.score))
+        Haptics.tap()
+    }
+
+    private func piecePath(_ r: CGFloat) -> CGPath {
+        let p = CGMutablePath()
+        let n = Int.random(in: 3...5)
+        for k in 0..<n {
+            let a = CGFloat(k) / CGFloat(n) * 2 * .pi
+            let rr = r * CGFloat.random(in: 0.6...1.2)
+            let pt = CGPoint(x: cos(a) * rr, y: sin(a) * rr)
+            if k == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+        }
+        p.closeSubpath()
+        return p
+    }
+
+    private func showWin() {
+        AudioManager.shared.playGameSound("score")
+        let banner = SKNode()
+        banner.position = CGPoint(x: Layout.width / 2, y: Layout.height / 2 + 40)
+        banner.zPosition = 2000
+        addChild(banner)
+        func label(_ text: String, size: CGFloat, y: CGFloat, color: UIColor) {
+            for (dx, dy, c) in [(CGFloat(3), CGFloat(-3), UIColor.black), (CGFloat(0), CGFloat(0), color)] {
+                let l = SKLabelNode(text: text)
+                l.fontName = "ChalkboardSE-Bold"
+                l.fontSize = size
+                l.fontColor = c
+                l.verticalAlignmentMode = .center
+                l.position = CGPoint(x: dx, y: y + dy)
+                banner.addChild(l)
+            }
+        }
+        label("YOU WIN!", size: 96, y: 0, color: UIColor(red: 1, green: 0.62, blue: 0, alpha: 1))
+        label("You fed him 500 foods and he popped!", size: 30, y: -80, color: .white)
+        label("Tap to play again", size: 26, y: -130, color: UIColor(white: 0.9, alpha: 1))
+        banner.setScale(0.2)
+        banner.run(.sequence([.scale(to: 1.1, duration: 0.25), .scale(to: 1.0, duration: 0.12)]))
+        // confetti
+        for i in 0..<120 {
+            let c = SKSpriteNode(color: [UIColor.systemRed, .systemYellow, .systemGreen, .systemBlue, .systemPink, .systemOrange][i % 6],
+                                 size: CGSize(width: 8, height: 14))
+            c.position = CGPoint(x: .random(in: 0...Layout.width), y: Layout.height + .random(in: 10...300))
+            c.zPosition = 1900
+            addChild(c)
+            let t = Double.random(in: 2.5...4.5)
+            c.run(.group([.moveBy(x: .random(in: -80...80), y: -(Layout.height + 350), duration: t),
+                          .repeatForever(.rotate(byAngle: .pi, duration: Double.random(in: 0.3...0.8)))]))
+        }
+        after(1.5) { [weak self] in self?.winReady = true }
     }
 
     private func serveOne(_ food: String, _ slot: Int) {
@@ -436,13 +588,25 @@ final class GameScene: SKScene {
 
     private func nextRoundOrEnd() {
         if !served.isEmpty { return }
-        if gameCount < 20 { serve() } else { ending() }
+        // Endless: after all 20 foods, shuffle them and keep going until 500.
+        if gameCount >= 20 {
+            GameState.randomFoodList = foodNames.shuffled()
+            gameCount = 0
+        }
+        serve()
     }
 
     private func onHeadAnimationFinished() {
         if headAnim == "eat" {
             headAnim = ""
             addScore()
+            if GameState.score >= Progress.target {
+                pumpkinHandLeft.play("idle")
+                pumpkinHead.play("idle")
+                headAnim = "idle"
+                win()
+                return
+            }
             GameState.canPick = true
             pumpkinHandLeft.play("idle")
             pumpkinHead.play("idle")
@@ -582,6 +746,11 @@ final class GameScene: SKScene {
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard game != nil, let t = touches.first else { return }
         pointer = t.location(in: self)
+        if GameState.gameState == "win" {
+            if winReady { winReady = false; reloadScene() }
+            return
+        }
+        if scoreBoxContains(pointer) { scoreBoxTapped() }
         if buttonContains(pointer) {
             buttonDown = true
             updateHover()
@@ -620,4 +789,14 @@ enum Haptics {
     static func tap() { light.impactOccurred() }
     static func correct() { notify.notificationOccurred(.success) }
     static func wrong() { notify.notificationOccurred(.error) }
+    static func pop() { UIImpactFeedbackGenerator(style: .heavy).impactOccurred(intensity: 1) }
+}
+
+// How many correct foods it takes to pop him, and the saved count.
+enum Progress {
+    static let target = 500
+    static var saved: Int {
+        get { UserDefaults.standard.integer(forKey: "fedCount") }
+        set { UserDefaults.standard.set(newValue, forKey: "fedCount") }
+    }
 }
