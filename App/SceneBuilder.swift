@@ -90,7 +90,7 @@ final class SceneLibrary {
             let ar = num(d["anchor_right"]), ab = num(d["anchor_bottom"])
             let ol = num(d["offset_left"]), ot = num(d["offset_top"])
             let or_ = num(d["offset_right"]), ob = num(d["offset_bottom"])
-            let pw = 700.0, ph = 500.0 // only top-level controls use anchors in this game
+            let pw = Double(Layout.width), ph = Double(Layout.height) // only top-level controls use anchors in this game
             node.position = CGPoint(x: al * pw + ol, y: at * ph + ot)
             node.controlSize = CGSize(width: (ar * pw + or_) - (al * pw + ol), height: (ab * ph + ob) - (at * ph + ot))
             node.centered = false

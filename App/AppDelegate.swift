@@ -50,15 +50,28 @@ final class GameViewController: UIViewController {
         skView.preferredFramesPerSecond = 60
         skView.backgroundColor = .black
         view.addSubview(skView)
-        let scene = GameScene(size: GameScene.viewSize)
-        skView.presentScene(scene)
     }
 
-    // Keep the game's 700:500 shape and center it (like the Android version).
+    // The scene is made once the screen size is known.
+    private func presentIfNeeded() {
+        guard skView.scene == nil, view.bounds.width > 0, view.bounds.width >= view.bounds.height else { return }
+        let b = view.bounds
+        Layout.width = min(max(Layout.height * b.width / b.height, 700), Layout.maxWidth)
+        let ptsPerUnit = min(b.width / Layout.width, b.height / Layout.height)
+        let inset = max(view.safeAreaInsets.left, view.safeAreaInsets.right)
+        let used = Layout.width * ptsPerUnit
+        let margin = (b.width - used) / 2  // part of the inset already covered by side space
+        Layout.safeInset = max(0, inset - margin) / ptsPerUnit
+        Log.write("layout width \(Layout.width) inset \(Layout.safeInset) screen \(b.size)")
+        skView.presentScene(GameScene(size: Layout.size))
+    }
+
+    // Fit the game (Layout.size) on screen without stretching or cutting it.
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
+        presentIfNeeded()
         let b = view.bounds
-        let aspect = GameScene.viewSize.width / GameScene.viewSize.height
+        let aspect = Layout.width / Layout.height
         var w = b.width, h = b.width / aspect
         if h > b.height { h = b.height; w = h * aspect }
         skView.frame = CGRect(x: (b.width - w) / 2, y: (b.height - h) / 2, width: w, height: h)
@@ -68,7 +81,7 @@ final class GameViewController: UIViewController {
 
     private func refreshBackdrop() {
         guard let scene = skView.scene, skView.window != nil,
-              let tex = skView.texture(from: scene, crop: CGRect(origin: .zero, size: GameScene.viewSize)) else { return }
+              let tex = skView.texture(from: scene, crop: CGRect(origin: .zero, size: scene.size)) else { return }
         backdrop.image = UIImage(cgImage: tex.cgImage())
     }
 

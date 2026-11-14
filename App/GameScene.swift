@@ -3,8 +3,17 @@ import SpriteKit
 // Port of scripts/game.gd, scripts/food.gd, scripts/car.gd and
 // scripts/mouse_follow.gd. The game area is 700 x 500, like the original.
 
+// Wide-screen layout: the game is 500 units tall and as wide as the
+// screen allows (700 to 1120). The art was widened to fill iPhone 17 screens.
+enum Layout {
+    static var width: CGFloat = 700
+    static var safeInset: CGFloat = 0   // Dynamic Island side margin, in game units
+    static let height: CGFloat = 500
+    static let maxWidth: CGFloat = 1120
+    static var size: CGSize { CGSize(width: width, height: height) }
+}
+
 final class GameScene: SKScene {
-    static let viewSize = CGSize(width: 700, height: 500)
 
     private let world = SKNode()   // Godot canvas: y down, moved by the camera
     private let uiRoot = SKNode()  // Godot CanvasLayer: y down, fixed
@@ -99,10 +108,16 @@ final class GameScene: SKScene {
         world.addChild(game)
 
         uiRoot.yScale = -1
-        uiRoot.position = CGPoint(x: 0, y: GameScene.viewSize.height)
+        uiRoot.position = CGPoint(x: 0, y: Layout.height)
         uiRoot.zPosition = 1000
         addChild(uiRoot)
         uiRoot.addChild(ui)
+
+        // Keep the play button and score box clear of the Dynamic Island.
+        ui.node("Control/PlayButton")?.position.x -= Layout.safeInset
+        for n in ["Back", "Flash", "Base"] {
+            ui.node("Control/ScorePanel/" + n)?.position.x += Layout.width - 700 - Layout.safeInset
+        }
 
         // A Camera2D node has nothing to draw.
         game.child("Camera")?.queueFree()
@@ -171,11 +186,11 @@ final class GameScene: SKScene {
     }
 
     private func applyCamera() {
-        world.position = CGPoint(x: 350 - cameraSmoothed.x, y: 250 + cameraSmoothed.y)
+        world.position = CGPoint(x: Layout.width / 2 - cameraSmoothed.x, y: Layout.height / 2 + cameraSmoothed.y)
         // AudioStreamPlayer2D at (0,0): distance attenuation and panning against the camera
         let dist = hypot(cameraSmoothed.x, cameraSmoothed.y)
         AudioManager.shared.volume = Float(max(0, 1 - dist / 2000))
-        let p = min(max(-cameraSmoothed.x / 700, -1), 1) * 0.25
+        let p = min(max(-cameraSmoothed.x / Layout.width, -1), 1) * 0.25
         AudioManager.shared.pan = Float(p * 2)
     }
 
@@ -282,7 +297,7 @@ final class GameScene: SKScene {
 
     private func reloadScene() {
         guard let view = view else { return }
-        let next = GameScene(size: GameScene.viewSize)
+        let next = GameScene(size: Layout.size)
         view.presentScene(next)
     }
 
