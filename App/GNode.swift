@@ -29,7 +29,8 @@ enum Assets {
         guard let r = region, r.count == 4 else { return base }
         let key = path + "#" + r.map { String($0) }.joined(separator: ",")
         if let t = textures[key] { return t }
-        let w = Double(base.size().width), h = Double(base.size().height)
+        // regions are in original-art pixels; the stored art is Assets.scale times larger
+        let w = Double(base.size().width / scale), h = Double(base.size().height / scale)
         let rect = CGRect(x: r[0] / w, y: 1.0 - (r[1] + r[3]) / h, width: r[2] / w, height: r[3] / h)
         let t = SKTexture(rect: rect, in: base)
         textures[key] = t
