@@ -363,13 +363,23 @@ final class GameScene: SKScene {
         GameState.gameState = "win"
         GameState.canPick = false
         Progress.saved = 0
-        AudioManager.shared.playPumpkinSound("fantastic")
-        // puff up and wobble...
-        let grow = SKAction.customAction(withDuration: 2.4) { [weak self] _, t in
+        // "Uh oh..." with a nervous little shake (AI voice)
+        AudioManager.shared.playPumpkinSound("uhoh")
+        let nervous = SKAction.customAction(withDuration: 0.9) { [weak self] _, t in
+            self?.applyHeadSize(1.9 + sin(t * 45) * 0.012)
+        }
+        pumpkinHead.run(nervous) { [weak self] in self?.scream() }
+    }
+
+    // "AHHH!" while he swells up, then he explodes as the scream ends
+    private func scream() {
+        AudioManager.shared.playPumpkinSound("ahh")
+        let d = 1.9
+        let grow = SKAction.customAction(withDuration: d) { [weak self] _, t in
             guard let self = self else { return }
-            let p = t / 2.4
-            let wobble = sin(p * 40) * 0.04 * p
-            self.applyHeadSize(1.9 + 0.6 * p * p + wobble)
+            let p = t / CGFloat(d)
+            let wobble = sin(p * 50) * 0.05 * p
+            self.applyHeadSize(1.9 + 0.7 * p * p + wobble)
         }
         pumpkinHead.run(grow) { [weak self] in self?.pop() }
     }
