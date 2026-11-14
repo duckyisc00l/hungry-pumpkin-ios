@@ -152,7 +152,6 @@ final class GameScene: SKScene {
         // game.gd _ready
         setDefaultGlobalValues()
         walker.visible = false
-        GameState.score = Progress.saved
         scoreLabel.label?.text = String(GameState.score)
         GameState.randomFoodList = foodNames.shuffled()
 
@@ -317,7 +316,7 @@ final class GameScene: SKScene {
 
     private func gameStart() {
         car.child("Timer")?.startTimer()
-        applyHeadSize(headScale(for: GameState.score))
+        applyHeadSize(headScale(for: Progress.saved))
         pumpkin.visible = true
         scoreAnimation.player?.play("show")
         GameState.canPick = false
@@ -329,8 +328,8 @@ final class GameScene: SKScene {
         AudioManager.shared.playGameSound("score")
         scoreAnimation.player?.play("score")
         scoreLabel.label?.text = String(GameState.score)
-        Progress.saved = GameState.score
-        applyHeadSize(headScale(for: GameState.score))
+        Progress.saved += 1   // total foods eaten over all games
+        applyHeadSize(headScale(for: Progress.saved))
     }
 
     // MARK: growing head and the 500-food win (added for iPhone)
@@ -411,7 +410,7 @@ final class GameScene: SKScene {
         after(1.0) { [weak self] in self?.showWin() }
     }
 
-    // Testing shortcut: 5 quick taps on the score box jump to 495.
+    // Testing shortcut: 5 quick taps on the score box set the total to 495.
     private var scoreTaps: [Double] = []
     private func scoreBoxContains(_ p: CGPoint) -> Bool {
         guard let back = ui.node("Control/ScorePanel/Back"), back.inParentHierarchy(self),
@@ -421,12 +420,10 @@ final class GameScene: SKScene {
     }
     private func scoreBoxTapped() {
         scoreTaps = scoreTaps.filter { clock - $0 < 2 } + [clock]
-        guard scoreTaps.count >= 5, GameState.score < Progress.target - 5 else { return }
+        guard scoreTaps.count >= 5, Progress.saved < Progress.target - 5 else { return }
         scoreTaps = []
-        GameState.score = Progress.target - 5
-        Progress.saved = GameState.score
-        scoreLabel.label?.text = String(GameState.score)
-        applyHeadSize(headScale(for: GameState.score))
+        Progress.saved = Progress.target - 5
+        applyHeadSize(headScale(for: Progress.saved))
         Haptics.tap()
     }
 
@@ -588,19 +585,14 @@ final class GameScene: SKScene {
 
     private func nextRoundOrEnd() {
         if !served.isEmpty { return }
-        // Endless: after all 20 foods, shuffle them and keep going until 500.
-        if gameCount >= 20 {
-            GameState.randomFoodList = foodNames.shuffled()
-            gameCount = 0
-        }
-        serve()
+        if gameCount < 20 { serve() } else { ending() }
     }
 
     private func onHeadAnimationFinished() {
         if headAnim == "eat" {
             headAnim = ""
             addScore()
-            if GameState.score >= Progress.target {
+            if Progress.saved >= Progress.target {
                 pumpkinHandLeft.play("idle")
                 pumpkinHead.play("idle")
                 headAnim = "idle"
