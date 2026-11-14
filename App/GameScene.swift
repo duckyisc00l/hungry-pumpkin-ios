@@ -247,8 +247,10 @@ final class GameScene: SKScene {
                 let pick = GameState.userPick
                 GameState.userPick = ""
                 if pick == GameState.ordered {
+                    Haptics.correct()
                     handleCorrectFood(pick)
                 } else {
+                    Haptics.wrong()
                     handleIncorrectFood(pick)
                 }
             }
@@ -275,6 +277,7 @@ final class GameScene: SKScene {
     }
 
     private func onPlayButtonPressed() {
+        Haptics.tap()
         changeView()
         playButton?.queueFree()
         playButton = nil
@@ -487,6 +490,7 @@ final class GameScene: SKScene {
 
     private func foodPressed(_ food: GNode) {
         if GameState.isBar {
+            Haptics.tap()
             AudioManager.shared.playFoodSound(food.gName)
         } else if GameState.gameState == "choice" && GameState.canPick {
             GameState.canPick = false
@@ -606,4 +610,14 @@ final class GameScene: SKScene {
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         buttonDown = false
     }
+}
+
+// Vibration feedback (not in the Android version; added for iPhone)
+enum Haptics {
+    private static let light = UIImpactFeedbackGenerator(style: .light)
+    private static let notify = UINotificationFeedbackGenerator()
+
+    static func tap() { light.impactOccurred() }
+    static func correct() { notify.notificationOccurred(.success) }
+    static func wrong() { notify.notificationOccurred(.error) }
 }

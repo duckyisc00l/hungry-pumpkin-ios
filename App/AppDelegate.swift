@@ -47,7 +47,7 @@ final class GameViewController: UIViewController {
         }
         skView.ignoresSiblingOrder = false
         skView.isMultipleTouchEnabled = false
-        skView.preferredFramesPerSecond = 60
+        skView.preferredFramesPerSecond = UIScreen.main.maximumFramesPerSecond  // 120 Hz on ProMotion screens
         skView.backgroundColor = .black
         view.addSubview(skView)
     }

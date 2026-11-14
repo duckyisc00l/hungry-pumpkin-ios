@@ -6,6 +6,8 @@ import UIKit
 // scales and rotations use Godot's own numbers (y pointing down).
 
 enum Assets {
+    // Art is stored at 2x (AI-upscaled); sprites are drawn at the original size.
+    static let scale: CGFloat = 2
     static let root: URL = Bundle.main.resourceURL!.appendingPathComponent("AppAssets")
     private static var textures: [String: SKTexture] = [:]
 
@@ -160,7 +162,7 @@ final class GNode: SKNode {
         guard let s = visual else { return }
         s.isHidden = false
         s.texture = tex
-        s.size = tex.size()
+        s.size = CGSize(width: tex.size().width / Assets.scale, height: tex.size().height / Assets.scale)
         s.anchorPoint = centered ? CGPoint(x: 0.5, y: 0.5) : CGPoint(x: 0, y: 1)
         s.xScale = flipH ? -1 : 1
     }

@@ -52,8 +52,13 @@ final class AudioManager: NSObject, AVAudioPlayerDelegate {
         game?.play()
     }
 
+    // Food name loaded ahead of time and scheduled to start right as "Give me" ends.
+    private var pendingName: AVAudioPlayer?
+
     private func playPumpkin(_ p: String) {
         pumpkin?.stop()
+        pendingName?.stop()
+        pendingName = nil
         pumpkin = make(p)
         pumpkin?.play()
     }
@@ -65,9 +70,18 @@ final class AudioManager: NSObject, AVAudioPlayerDelegate {
     func playGivemeSound(_ foodName: String) {
         let n = Int.random(in: 1...3)
         playPumpkin("assets/pumpkin/audio/pumpkin_giveme\(n)_audio.mp3")
+        // No gap: start the food name exactly when "Give me" ends
+        // (its first 0.07 s is silence, so begin it 0.05 s early).
+        if let giveme = pumpkin, let name = make("assets/pumpkin/food_audio/pumpkin_\(foodName.lowercased())_audio.mp3") {
+            let startAt = giveme.deviceCurrentTime + max(0, giveme.duration - giveme.currentTime - 0.05)
+            name.play(atTime: startAt)
+            pendingName = name
+        }
         pumpkinWaiters.append { [weak self] in
-            if GameState.isNo { return }
-            self?.playPumpkin("assets/pumpkin/food_audio/pumpkin_\(foodName.lowercased())_audio.mp3")
+            guard let self = self, let name = self.pendingName else { return }
+            self.pendingName = nil
+            if GameState.isNo { name.stop(); return }
+            self.pumpkin = name   // it is already playing
         }
     }
 
