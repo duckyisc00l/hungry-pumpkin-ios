@@ -365,7 +365,7 @@ final class GameScene: SKScene {
         Progress.saved = 0
         // "Uh oh..." with a nervous little shake (AI voice)
         AudioManager.shared.playPumpkinSound("uhoh")
-        let nervous = SKAction.customAction(withDuration: 1.5) { [weak self] _, t in
+        let nervous = SKAction.customAction(withDuration: 1.05) { [weak self] _, t in
             self?.applyHeadSize(1.9 + sin(t * 45) * 0.012)
         }
         pumpkinHead.run(nervous) { [weak self] in self?.scream() }
